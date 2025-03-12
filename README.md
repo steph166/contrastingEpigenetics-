@@ -194,6 +194,99 @@ joined_ranges <- apply(joined_ranges,2,as.character)
 write.csv(joined_ranges, file = "/Users/stephanie/Desktop/CoverageFile/MNhyper_geneInfo.csv", row.names = FALSE, quote = FALSE)
 ```
 
+####Hyper-and Hypomethylated density displayed in three different scaffolds of I. scapularis
+```R
+
+#Package installation in Rstudio
+BiocManager::install("karyoploteR")
+BiocManager::install("readr")
+BiocManager::install("seqTools")
+BiocManager::install ("GenomicRanges")
+BiocManager::install("genomation")
+
+
+#Loading libraries
+library(readr)
+library(GenomicRanges)
+library(readxl)
+library(rtracklayer)
+library(tidyverse)
+library(regioneR)
+library(karyoploteR)
+
+#Hypermethylated bases detected using WGBS were loaded in Rstudio 
+dmr_sigHY <- read_excel("/Users/stephanie/Desktop/PlottingKaryoploteR/MNHyperExcel.xlsx", sheet=1)
+#Convert significant DMRs to GRanges
+dmr_sigHY_granges <- makeGRangesFromDataFrame(dmr_sigHY, seqnames.field = "seqnames", start.field = "start", end.field = "end", keep.extra.columns = TRUE)
+
+#Hypomethylated bases detected using WGBS were loaded in Rstudio
+dmr_sigHYPo <- read_excel("/Users/stephanie/Desktop/PlottingKaryoploteR/MNhypoExcel.xlsx", sheet=1)
+#Convert significant DMRs to GRanges
+dmr_sigHYPo_granges <- makeGRangesFromDataFrame(dmr_sigHYPo, seqnames.field = "seqnames", start.field = "start", end.field = "end", keep.extra.columns = TRUE)
+
+#I. scapularis genome were loaded and interested columns were extracted 
+genome_sizes <- read.table("/Users/stephanie/Desktop/PlottingKaryoploteR/GCF_016920785.2_ASM1692078v2_genomic.fa.fai", header = FALSE, stringsAsFactors = FALSE)
+head(genome_sizes)
+genome_sizes$start <- 1  
+colnames(genome_sizes) <- c("chr", "end", "junk1", "junk2", "junk3","start")
+genome_sizes <- genome_sizes[, c("chr","start", "end")]
+
+#Three scaffolds were selected for plotting and genome in GRanges format is stored in custome_genome
+list_of_chromosoma= c("NW_024609835.1", "NW_024609846.1", "NW_024609857.1")
+custom_genome <- toGRanges(genome_sizes)
+
+#Settings and drawing the scaffolds
+kp <- plotKaryotype( genome = genome_sizes,
+                     chromosomes = list_of_chromosoma, 
+                     plot.type = 2,
+                     ideogram.plotter = NULL,
+                     cex=1.5)
+
+kpAddCytobandsAsLine(kp)
+
+#Gene annotation from I. scapularis were loaded and gene column were used for the label 
+gff_file <- "/Users/stephanie/Desktop/PlottingKaryoploteR/genomic.gff"
+gffRangedData<-import.gff(gff_file)
+
+gffRangedData <- gffRangedData[
+  gffRangedData$type == "gene", c("source","type", "gene")
+] 
+
+# Some hyper- and hypomethylated genes were filtered together with their gene annotation for being plotted
+gffRangedData <- gffRangedData[
+  
+  ##1st block of hypermethylated genes
+  
+    gffRangedData$gene == "LOC8023308" |
+    gffRangedData$gene == "LOC115311576" |
+    gffRangedData$gene == "LOC115317095" |
+    
+    
+  ###2nd block hypomethylated genes
+    
+    gffRangedData$gene == "LOC8027741" | 
+    gffRangedData$gene == "LOC8024530" |
+    gffRangedData$gene == "LOC8030101" |
+    gffRangedData$gene == "LOC8025626" |
+    gffRangedData$gene == "LOC8037629" |
+    gffRangedData$gene == "LOC8033621" |
+    gffRangedData$gene == "LOC8035386" |
+    gffRangedData$gene == "LOC8025554" |
+    gffRangedData$gene == "LOC80224204" |
+    gffRangedData$gene == "LOC8041333" |
+    gffRangedData$gene == "LOC121833955" 
+]
+
+genesGRange<-as(gffRangedData, "GRanges")
+genesGRange$x <- genesGRange@ranges@start
+
+#Hyper- and hypomethylated density were plot in the panel 1 and 2 with the following settings 
+kpAddBaseNumbers(kp)
+kpPlotDensity(kp, data=dmr_sigHY_granges, data.panel = 2, col="#E41A1C" , r0=-0.15, r1=1.5)
+kpPlotDensity(kp, data=dmr_sigHYPo_granges, data.panel = 1, col="#27AEF9", r0=-0.15, r1=1.5)
+
+```
+
 
 #### Variable sites (SNPs) that interfere with DNA methylation using WGS with FreeBayes
 
