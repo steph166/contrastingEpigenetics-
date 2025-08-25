@@ -1,5 +1,5 @@
 # Contrasting Epigenetics of Ixodes scapularis Populations
-#### Stephanie Guzman-Valencia, Jacob Cassens, Perot Saelao, Abagail Leal, Elizabeth Lohstroh, Cristina Harvey, Brenda Galvan-Leal, Cross Chambers, Crys Wright, Sydney Orsborn, Tietjen Mackenzie, Tammi Johnson, Nicole Mehta, Michael Golding, Raul Medina, Danielle M. Tufts, Jianmin Zhong, Christopher Faulk, Jonathan Oliver, and Adela Oliva Chavez
+#### Stephanie Guzman-Valencia, Jacob Cassens, Perot Saelao, Abagail Leal, Elizabeth Lohstroh, Cristina Harvey, Brenda Leal-Galvan, Cross Chambers, Crys Wright, Sydney Orsborn,  Mackenzie Tietjen, Tammi Johnson, Nicole A Mehta, Michael C. Golding, Raul F. Medina, Danielle M. Tufts, Christopher Faulk, Jonathan D. Oliver, and Adela Oliva Chavez
 ### Suplememntary material
 ## Table of contents
 Characterization of 5-mC patterns in Texas and Minnesota I. scapularis populations using WGBS
@@ -15,7 +15,7 @@ Characterization of 5-mC patterns in Texas and Minnesota I. scapularis using Oxf
 
 ### Characterization of 5-mC patterns in Texas and Minnesota I. scapularis populations using WGBS
 
-#### Methylation call in TX and MN reads
+#### Methylation call for TX and MN reads
 
 #### Read assessment and quality control
 
@@ -49,7 +49,7 @@ deduplicate_bismark --output_dir deduplication_output sorted_output.bam
 bismark_methylation_extractor --gzip --bedGraph --buffer_size 24G --cytosine_report --genome_folder "$REAL_PATH" deduplication_output/sorted_output.deduplicated.bam -o MethylationCall
 ```
 
-#### Hyper/hypormethylated genes identification with Methylkit
+#### Hyper/hypomethylated genes identification with Methylkit
 ```R
 #Package installation in Rstudio
 BiocManager::install("genomation")
@@ -217,103 +217,132 @@ joined_ranges <- apply(joined_ranges,2,as.character)
 #Hypermethylated genes were writen a table   
 write.csv(joined_ranges, file = "/Users/stephanie/Desktop/CoverageFile/MNhyper_geneInfo.csv", row.names = FALSE, quote = FALSE)
 ```
-#### Hyper-and Hypomethylated density displayed in three different scaffolds of I. scapularis
+## Distribution of differentially methylated sites in the blacklegged tick genome using circlize
 ```R
 #Package installation in Rstudio
-BiocManager::install("karyoploteR")
-BiocManager::install("readr")
-BiocManager::install("seqTools")
-BiocManager::install ("GenomicRanges")
-BiocManager::install("genomation")
+install.packages("circlize")
+BiocManager::install("Biostrings")
 
 
-#Loading libraries
-library(readr)
-library(GenomicRanges)
-library(readxl)
-library(rtracklayer)
-library(regioneR)
-library(karyoploteR)
+#Loading the libraries
+library(Biostrings)
+library(rtracklayer)  
+library(circlize)
 
-#Hypermethylated bases detected using WGBS were loaded in Rstudio 
-dmr_sigHY <- read_excel("/Users/stephanie/Desktop/PlottingKaryoploteR/MNHyperExcel.xlsx", sheet=1)
-#Convert significant DMRs to GRanges
-dmr_sigHY_granges <- makeGRangesFromDataFrame(dmr_sigHY, seqnames.field = "seqnames", start.field = "start", end.field = "end", keep.extra.columns = TRUE)
 
-#Hypomethylated bases detected using WGBS were loaded in Rstudio
-dmr_sigHYPo <- read_excel("/Users/stephanie/Desktop/PlottingKaryoploteR/MNhypoExcel.xlsx", sheet=1)
-#Convert significant DMRs to GRanges
-dmr_sigHYPo_granges <- makeGRangesFromDataFrame(dmr_sigHYPo, seqnames.field = "seqnames", start.field = "start", end.field = "end", keep.extra.columns = TRUE)
+#Loading the genome in fasta file
+genome <- readDNAStringSet("/Users/stephanie/Desktop/CircularGenome/ncbi_dataset/ncbi_dataset/data/GCF_016920785.2/GCF_016920785.2_ASM1692078v2_genomic.fasta")
 
-#I. scapularis genome were loaded and interested columns were extracted 
-genome_sizes <- read.table("/Users/stephanie/Desktop/PlottingKaryoploteR/GCF_016920785.2_ASM1692078v2_genomic.fa.fai", header = FALSE, stringsAsFactors = FALSE)
-head(genome_sizes)
-genome_sizes$start <- 1  
-colnames(genome_sizes) <- c("chr", "end", "junk1", "junk2", "junk3","start")
-genome_sizes <- genome_sizes[, c("chr","start", "end")]
+genome_info <- data.frame(
+  name = names(genome),     # contig or chromosome names
+  start = 0,                # start position (usually 0 or 1)
+  end = width(genome)       # length of each sequence
+)
 
-#Three scaffolds were selected for plotting and genome in GRanges format is stored in custome_genome
-list_of_chromosoma= c("NW_024609835.1", "NW_024609846.1", "NW_024609857.1")
-custom_genome <- toGRanges(genome_sizes)
+# Simplify names because they contain a lot of extra information
+genome_info$name <- sub(" .*", "", genome_info$name)  
 
-#Settings and drawing the scaffolds
-kp <- plotKaryotype( genome = genome_sizes,
-                     chromosomes = list_of_chromosoma, 
-                     plot.type = 2,
-                     ideogram.plotter = NULL,
-                     cex=1.5)
+# Clear any previous plots
+circos.clear()
 
-kpAddCytobandsAsLine(kp)
+# Set layout parameters
+#Lowering the gaps in the circular genome
+circos.par(gap.degree = 0.5, cell.padding = c(0, 0, 0, 0))
 
-#formatting the labes in the plot
-kpText(kp, chr=genesGRange@seqnames,
-       x=genesGRange$x,
-       y=0.3,
-       labels=genesGRange$gene,
-       data.panel = 2,
-       cex=1.2,
-       srt=-45)
+# Initialize the circular genome layout
+circos.initialize(factors = genome_info$name, xlim = genome_info[, c("start", "end")])
 
-#Gene annotation from I. scapularis were loaded and gene column were used for the label 
-gff_file <- "/Users/stephanie/Desktop/PlottingKaryoploteR/genomic.gff"
-gffRangedData<-import.gff(gff_file)
+#Title and legends added
+text(0, 0, "DMBs MN", cex = 4)
 
-gffRangedData <- gffRangedData[
-  gffRangedData$type == "gene", c("source","type", "gene")
-] 
+#Drawing the first track with the genome
+circos.trackPlotRegion(
+  ylim = c(0, 1),
+  panel.fun = function(x, y) {
+    circos.axis(h = "top", labels.cex = 0.4)
+  },
+  track.height = 0.03
+)
 
-# Some hyper- and hypomethylated genes were filtered together with their gene annotation for being plotted
-gffRangedData <- gffRangedData[
-  
-  ##1st block of hypermethylated genes
-  
-    gffRangedData$gene == "LOC8023308" |
-    gffRangedData$gene == "LOC115311576" |
-    gffRangedData$gene == "LOC115317095" |
-    
-    
-  ###2nd block hypomethylated genes
-    
-    gffRangedData$gene == "LOC8027741" | 
-    gffRangedData$gene == "LOC8024530" |
-    gffRangedData$gene == "LOC8030101" |
-    gffRangedData$gene == "LOC8025626" |
-    gffRangedData$gene == "LOC8037629" |
-    gffRangedData$gene == "LOC8033621" |
-    gffRangedData$gene == "LOC8035386" |
-    gffRangedData$gene == "LOC8025554" |
-    gffRangedData$gene == "LOC80224204" |
-    gffRangedData$gene == "LOC8041333" |
-    gffRangedData$gene == "LOC121833955" 
-]
+# Importing the DMS dataset
+dms_df <- read.table("/Users/stephanie/Desktop/CircularGenome/MNhypo_hyper.txt", header = TRUE, sep = "\t")
 
-genesGRange<-as(gffRangedData, "GRanges")
-genesGRange$x <- genesGRange@ranges@start
+#Convert to data frame
+is.data.frame(dms_df)
 
-#Hyper- and hypomethylated density were plot in the panel 1 and 2 with the following settings 
-kpAddBaseNumbers(kp)
-kpPlotDensity(kp, data=dmr_sigHY_granges, data.panel = 2, col="#E41A1C" , r0=-0.15, r1=1.5)
-kpPlotDensity(kp, data=dmr_sigHYPo_granges, data.panel = 1, col="#27AEF9", r0=-0.15, r1=1.5)
+# Rename columns seqnames
+colnames(dms_df)[colnames(dms_df) == "seqnames"] <- "chr"
+
+# Use meth.diff as the value column
+dms_df$value <- dms_df$meth.diff
+
+#Drawing the second track with the DMS data
+circos.genomicTrack(
+  dms_df[, c("chr", "start", "end", "value")],
+  panel.fun = function(region, value, ...) {
+    circos.genomicPoints(
+      region, value,
+      col = ifelse(value > 0, "coral", "turquoise"),  # coral = hyper, turquoise = hypo
+      pch = 16, cex = 1, ...
+    )
+  },
+  track.height = 0.1,
+  ylim = c(min(dms_df$value, na.rm = TRUE), max(dms_df$value, na.rm = TRUE))
+)
+
+#plotting the gene density
+gff_data <- import("/Users/stephanie/Desktop/PlottingKaryoploteR/genomic.gff")
+genes <- gff_data[gff_data$type == "gene"]
+
+#convert to data frame
+genes_df <- as.data.frame(genes)
+
+# Rename seqnames to chr 
+colnames(genes_df)[colnames(genes_df) == "seqnames"] <- "chr"
+
+# Keep only the required columns
+genes_df <- genes_df[, c("chr", "start", "end")]
+#columnas <- genes_df[, c("chr", "start", "end")]
+
+
+bed_list = list(genes_df)
+
+#Drawing the third track with the gene density
+circos.genomicDensity(
+  bed_list,
+  col = c("#FFD700"),  # Purple
+  track.height = 0.1
+  #window.size = 1e6   # 1 Mb sliding window
+)
+
+#Adding label for a specific scaffold in a separate outer track
+
+# Define the scaffold names you want to label
+scaffolds_to_label <- c(
+  "NW_024609835.1", "NW_024609836.1", "NW_024609837.1", "NW_024609838.1",
+  "NW_024609839.1", "NW_024609846.1", "NW_024609857.1", "NW_024609868.1",
+  "NW_024609879.1", "NW_024609880.1", "NW_024609881.1", "NW_024609882.1",
+  "NW_024609883.1", "NW_024609884.1"
+)
+
+# Filter genome_info for those scaffolds
+label_info <- genome_info[genome_info$name %in% scaffolds_to_label, ]
+
+# Create a label column
+label_info$label <- label_info$name
+
+# Add the label in a new outer track
+circos.genomicLabels(
+  label_info[, c("name", "start", "end", "label")],
+  labels.column = 4,
+  side = "inside",  # Place label outside the genome circle
+  col = "black",
+  line_col = "black",
+  connection_height = mm_h(5),
+  cex = 1.2,
+  track.margin = c(0.01, 0.01)  # Small margin to avoid overlap
+)
+
 ```
 
 #### Variable sites (SNPs) that interfere with DNA methylation using WGS with FreeBayes
@@ -573,4 +602,6 @@ kpPlotDensity(kp, data=dmr_sig_granges, data.panel = 2, col="#FFB000")
 kpPlotDensity(kp, data=iscap_genes_granges, data.panel = 2, col="#AA88FF")
 
 ```
+
+
 
