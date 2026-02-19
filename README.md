@@ -21,12 +21,12 @@ Characterization of 5-mC patterns in Texas and Minnesota I. scapularis using Oxf
 
 Before trimming, raw sequences were asssessed with FASTQC
 ```shell
-trim_galore --fastqc "${FILE_NAME_1}.fastq.gz" "${FILE_NAME_2}.fastq.gz" -o fastqcRaw
+fastqc -o fastqc_reports -t 4 sample_R1.fq.gz sample_R2.fq.gz
 ```
 
 Raw sequences were trimmed and filtered out using Trim_galore
 ```shell
-trim_galore --paired -q 30 --illumina --gzip --fastqc "${FILE_NAME_1}.fastq.gz" "${FILE_NAME_2}.fastq.gz" -o trimmed
+trim_galore --cores 4 --paired -q 30 --illumina --length 35 --clip_R1 10 --clip_R2 10 --three_prime_clip_R1 5 --three_prime_clip_R2 5 "${FILE_NAME_1}.fastq.gz" "${FILE_NAME_2}.fastq.gz" -o trimmed
 ```
 
 #### Mapping reads to reference genome (GCF_016920785.2) using Bismark. Deduplication and methylation calls were performed with Bismark using reads previously sorted with SAMtools.
@@ -34,7 +34,7 @@ trim_galore --paired -q 30 --illumina --gzip --fastqc "${FILE_NAME_1}.fastq.gz" 
 ```shell
 bismark_genome_preparation --verbose preparation  #Before the alignment, reference genome was indexed. Preparation is a folder that contains the reference genome
 
-bismark --multicore 8 --genome alignment/ -1 "alignment/${FILE_NAME_1}_val_1.fastq.gz" -2 "alignment/${FILE_NAME_2}_val_2.fastq.gz" --output_dir alignmentOutput
+bismark --multicore 8 -p 2 --genome preparation/ -1 "alignment/${FILE_NAME_1}.fq.gz" -2 "alignment/${FILE_NAME_2}.fq.gz" --output_dir alignmentOutput
 ```
 
 Sequences were sorted with SAMtools
@@ -46,7 +46,9 @@ Deduplication and methylation call were perfomed with Bismark
 ```shell
 deduplicate_bismark --output_dir deduplication_output sorted_output.bam
 
-bismark_methylation_extractor --gzip --bedGraph --buffer_size 24G --cytosine_report --genome_folder "$REAL_PATH" deduplication_output/sorted_output.deduplicated.bam -o MethylationCall
+REAL_PATH="$(realpath preparation)"
+
+bismark_methylation_extractor --multicore 4 --paired-end --gzip --bedGraph --buffer_size 24G --cytosine_report --genome_folder "$REAL_PATH" deduplication_output/sorted_output.deduplicated.bam -o MethylationCall
 ```
 
 #### Hyper/hypomethylated genes identification with Methylkit
@@ -65,6 +67,7 @@ library("GenomicRanges")
 library("methylKit")
 library(ggplot2)
 library(reshape)
+library(dendextend)
 library(dplyr)
 library(vegan)
 
@@ -86,7 +89,7 @@ mincov = 10)
 
 #Percentage methylation distribution and CpG coverage histogram were obtained from all samples
 getMethylationStats(myobj[[1]],plot=TRUE,both.strands=FALSE)
-getCoverageStats(myobj[[1]],plot=TRUE,both.strands=FALSE)
+getCoverageStats(myobj[[1]],plot=FALSE,both.strands=FALSE)
 
 ###Comparative analysis###
 
@@ -124,9 +127,12 @@ text(abcd1234, "sites", pos = 3, col="blue", cex=0.9, select=c(9,10))
 
 
 ##Finding hyper/hypomethylated base among TX and MN ticks##
+#account for potential covariantes that could influence the results
 
-#Differential methylation were calculated from TX and MN samples
-myDiff=calculateDiffMeth(meth)
+#Define 1 as male and 0 as female
+covariates = data.frame(sex = as.factor(c(1,0,1,0,0,0,0,0,1,1,1)))
+
+myDiff=calculateDiffMeth(meth, covariates = covariates, mc.cores = 4)
 
 #HYPERMETHYLATION. Significant hypermethylated bases are retained with at least methylation differences of 25% with q-value of equal or major of 0.01
 myDiff25p.hyper=getMethylDiff(myDiff,difference=25,qvalue=0.01,type="hyper")
@@ -144,9 +150,6 @@ mydiffhypogr<- as(myDiff25p.hypo, "GRanges")  #New object was converted to GRang
 tf <- as.data.frame(mydiffhypogr)  #GRange objet was reshaped to data frame
 write.table(tf, "/Users/stephanie/Desktop/CoverageFile/MNhypo.txt", quote = FALSE, row.names = FALSE, sep="\t", col.names = TRUE)
 
-#Differential methylated sites were calculated retaining at least methylation differences of 25% with q-value of equal or major of 0.01
-myDiff25p=getMethylDiff(myDiff,difference=25,qvalue=0.01)
-
 #Hyper/hypomethylated sites were annotated and plotted by features
 
 #Differentially hypermethylated sites were intersected with annotated features in GRanges object
@@ -162,7 +165,7 @@ diffannhypo <- annotateWithFeatures(as(myDiff25p.hypo, "GRanges"), gfftype)
 diffannhypo
 
 #Plotting the differentially hyper and hypho methylated according with features only target elements overlapping with features
-allbar <- data.frame(feature = c("gene" ,"mRNA"  , "exon"  , "CDS"  ,  "pseudogene"   ,  "tRNA" ,"lnc_RNA"  ,  "snRNA", "transcript" ,"rRNA",     "cDNA_match"  ,     "snoRNA"), hyper = c(12.99 ,11.60 ,9.74 ,7.19 ,5.10 ,0.00 ,0.93 ,0.00 ,0.00 ,0.46 ,0.00 ,0.00), hypo = c(48.19   ,    44.04    ,  7.52    ,  4.88     ,  0.93    ,   0.00     ,  4.46   ,  0.00   , 0.76 , 0.00  ,  0.00  , 0.00))
+allbar <- data.frame(feature = c("gene" ,"mRNA"  , "exon"  , "CDS"  ,  "pseudogene"   ,  "tRNA" ,"lnc_RNA"  ,  "snRNA", "transcript" ,"rRNA",     "cDNA_match"  ,     "snoRNA"), hyper = c(28.52 ,27.49 ,8.95 ,6.90 ,3.82 ,0.00 ,1.30 ,0.00 ,0.84 ,0.00 ,0.00 ,0.00), hypo = c(52.70 ,48.61 ,8.44 ,5.33 ,3.15 ,0.00 ,4.06 ,0.00 ,1.73 ,0.00 ,0.02 , 0.00))
 
 tt <- melt(allbar, id.vars = "feature")  # Melt the data frame to long format
 
