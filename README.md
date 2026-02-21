@@ -605,6 +605,12 @@ kpPlotDensity(kp, data=dmr_sig_granges, data.panel = 2, col="#FFB000")
 kpPlotDensity(kp, data=iscap_genes_granges, data.panel = 2, col="#AA88FF")
 
 ```
+####Visualization of GO terms using circlize
+
+```R
+
+
+```
 
 
 
