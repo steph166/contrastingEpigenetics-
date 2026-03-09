@@ -233,119 +233,127 @@ library(rtracklayer)
 library(circlize)
 
 
-#Loading the genome in fasta file
-genome <- readDNAStringSet("/Users/stephanie/Desktop/CircularGenome/ncbi_dataset/ncbi_dataset/data/GCF_016920785.2/GCF_016920785.2_ASM1692078v2_genomic.fasta")
+#Loading the inputs
+fasta_file <- "/Users/stephanie/Desktop/circlize/GCF_016920785.2_ASM1692078v2_genomic.fasta"
+dms_file   <- "/Users/stephanie/Desktop/circlize/MNhypo_hyper.txt"
+gff_file   <- "/Users/stephanie/Desktop/circlize/genomic.gff"
 
-genome_info <- data.frame(
-  name = names(genome),     # contig or chromosome names
-  start = 0,                # start position (usually 0 or 1)
-  end = width(genome)       # length of each sequence
-)
-
-# Simplify names because they contain a lot of extra information
-genome_info$name <- sub(" .*", "", genome_info$name)  
-
-# Clear any previous plots
-circos.clear()
-
-# Set layout parameters
-#Lowering the gaps in the circular genome
-circos.par(gap.degree = 0.5, cell.padding = c(0, 0, 0, 0))
-
-# Initialize the circular genome layout
-circos.initialize(factors = genome_info$name, xlim = genome_info[, c("start", "end")])
-
-#Title and legends added
-text(0, 0, "DMBs MN", cex = 4)
-
-#Drawing the first track with the genome
-circos.trackPlotRegion(
-  ylim = c(0, 1),
-  panel.fun = function(x, y) {
-    circos.axis(h = "top", labels.cex = 0.4)
-  },
-  track.height = 0.03
-)
-
-# Importing the DMS dataset
-dms_df <- read.table("/Users/stephanie/Desktop/CircularGenome/MNhypo_hyper.txt", header = TRUE, sep = "\t")
-
-#Convert to data frame
-is.data.frame(dms_df)
-
-# Rename columns seqnames
-colnames(dms_df)[colnames(dms_df) == "seqnames"] <- "chr"
-
-# Use meth.diff as the value column
-dms_df$value <- dms_df$meth.diff
-
-#Drawing the second track with the DMS data
-circos.genomicTrack(
-  dms_df[, c("chr", "start", "end", "value")],
-  panel.fun = function(region, value, ...) {
-    circos.genomicPoints(
-      region, value,
-      col = ifelse(value > 0, "coral", "turquoise"),  # coral = hyper, turquoise = hypo
-      pch = 16, cex = 1, ...
-    )
-  },
-  track.height = 0.1,
-  ylim = c(min(dms_df$value, na.rm = TRUE), max(dms_df$value, na.rm = TRUE))
-)
-
-#plotting the gene density
-gff_data <- import("/Users/stephanie/Desktop/PlottingKaryoploteR/genomic.gff")
-genes <- gff_data[gff_data$type == "gene"]
-
-#convert to data frame
-genes_df <- as.data.frame(genes)
-
-# Rename seqnames to chr 
-colnames(genes_df)[colnames(genes_df) == "seqnames"] <- "chr"
-
-# Keep only the required columns
-genes_df <- genes_df[, c("chr", "start", "end")]
-#columnas <- genes_df[, c("chr", "start", "end")]
-
-
-bed_list = list(genes_df)
-
-#Drawing the third track with the gene density
-circos.genomicDensity(
-  bed_list,
-  col = c("#FFD700"),  # Purple
-  track.height = 0.1
-  #window.size = 1e6   # 1 Mb sliding window
-)
-
-#Adding label for a specific scaffold in a separate outer track
-
-# Define the scaffold names you want to label
+#Adding label for a specific scaffold
 scaffolds_to_label <- c(
-  "NW_024609835.1", "NW_024609836.1", "NW_024609837.1", "NW_024609838.1",
-  "NW_024609839.1", "NW_024609846.1", "NW_024609857.1", "NW_024609868.1",
-  "NW_024609879.1", "NW_024609880.1", "NW_024609881.1", "NW_024609882.1",
+  "NW_024609835.1", "NW_024609839.1", "NW_024609846.1", "NW_024609857.1", "NW_024609868.1",
+  "NW_024609879.1", "NW_024609836.1", "NW_024609882.1",
   "NW_024609883.1", "NW_024609884.1"
 )
 
-# Filter genome_info for those scaffolds
-label_info <- genome_info[genome_info$name %in% scaffolds_to_label, ]
+#Buiding genome info
+genome <- readDNAStringSet(fasta_file)
 
-# Create a label column
-label_info$label <- label_info$name
+genome_info <- data.frame(
+  name  = sub(" .*", "", names(genome)),
+  start = 1,
+  end   = width(genome),
+  stringsAsFactors = FALSE
+)
+#Ordering scaffolds by length (largest first)
+genome_info <- genome_info[order(genome_info$end, decreasing = TRUE), ]
 
-# Add the label in a new outer track
-circos.genomicLabels(
-  label_info[, c("name", "start", "end", "label")],
-  labels.column = 4,
-  side = "inside",  # Place label outside the genome circle
-  col = "black",
-  line_col = "black",
-  connection_height = mm_h(5),
-  cex = 1.2,
-  track.margin = c(0.01, 0.01)  # Small margin to avoid overlap
+n_sectors <- nrow(genome_info)
+
+#Initialize the circular genome layout
+circos.clear()
+circos.par(
+  gap.degree = gap_deg,
+  start.degree = 90,
+  cell.padding = c(0, 0, 0, 0),
+  track.margin = c(0.001, 0.001),
+  points.overflow.warning = FALSE
 )
 
+circos.initialize(
+  factors = genome_info$name,
+  xlim = genome_info[, c("start", "end")]
+)
+
+text(0, 0, "DMBs MN", cex = 5)
+
+#Drawing the first track
+circos.trackPlotRegion(
+  ylim = c(0, 1),
+  track.height = 0.055,
+  bg.border = NA,
+  panel.fun = function(x, y) {
+    circos.axis(h = "top", labels = FALSE, major.tick.length = mm_h(1.5), minor.ticks = 0)
+
+    sector <- get.cell.meta.data("sector.index")
+    if (sector %in% scaffolds_to_label) {
+      xcenter <- mean(get.cell.meta.data("xlim"))
+      circos.text(
+        x = xcenter, y = 0.10, labels = sector,
+        cex = 0.8,
+        facing = "clockwise", niceFacing = TRUE,
+        adj = c(0, 0.5)
+      )
+    }
+  }
+)
+
+#Importing the DMS points and drawing the second track with the DMS data
+dms_df <- read.table(dms_file, header = TRUE, sep = "\t", stringsAsFactors = FALSE)
+
+if ("seqnames" %in% colnames(dms_df)) {
+  colnames(dms_df)[colnames(dms_df) == "seqnames"] <- "chr"
+}
+dms_df$chr <- sub(" .*", "", dms_df$chr)
+dms_df$value <- dms_df$meth.diff
+
+dms_df <- dms_df[dms_df$chr %in% genome_info$name, ]
+
+circos.genomicTrack(
+  dms_df[, c("chr", "start", "end", "value")],
+  ylim = range(dms_df$value, na.rm = TRUE),
+  track.height = 0.09,
+  bg.border = NA,
+  panel.fun = function(region, value, ...) {
+    circos.genomicPoints(
+      region, value,
+      col = ifelse(value > 0, "coral", "turquoise"),
+      pch = 16, cex = 0.32, ...
+    )
+  }
+)
+
+#Plotting the gene density
+gff_data <- import(gff_file)
+genes <- gff_data[gff_data$type == "gene"]
+genes_df <- as.data.frame(genes)
+
+if ("seqnames" %in% colnames(genes_df)) {
+  colnames(genes_df)[colnames(genes_df) == "seqnames"] <- "chr"
+}
+genes_df$chr <- sub(" .*", "", genes_df$chr)
+genes_df <- genes_df[, c("chr", "start", "end")]
+genes_df <- genes_df[genes_df$chr %in% genome_info$name, ]
+
+circos.genomicDensity(
+  list(genes_df),
+  col = "#FFD700",
+  track.height = 0.07,
+  bg.border = NA,
+  window.size = 5e5
+)
+
+#Adding legend
+legend(
+  "bottomleft",
+  legend = c("Hypermethylated sites", "Hypomethylated sites", "Gene density"),
+  col = c("coral", "turquoise", "#FFD700"),
+  pch = c(16, 16, 15),
+  pt.cex = 1.6,
+  cex = 0.85,
+  y.intersp = 0.6,   # <-- decrease spacing between lines (try 0.5–0.8)
+  x.intersp = 0.6,
+  bty = "n"
+)
 ```
 
 #### Variable sites (SNPs) that interfere with DNA methylation using WGS with FreeBayes
@@ -605,10 +613,45 @@ kpPlotDensity(kp, data=dmr_sig_granges, data.panel = 2, col="#FFB000")
 kpPlotDensity(kp, data=iscap_genes_granges, data.panel = 2, col="#AA88FF")
 
 ```
-####Visualization of GO terms using circlize
+####Visualization of GO terms using ggplot2 (only the script for biological processes is displayed)
 
 ```R
+#Loading the input and preparing the data 
+go_data <- read_csv("/Users/stephanie/Desktop/GOmaterial/plot/GO_hypo_Biol.csv")
+colnames(go_data) <- c("GO_Term", "Over_Under", "Ref_Count", "Input_Count", "Expected",
+                       "Fold_Change", "p_value", "FDR")
+go_data$logP <- -log10(go_data$p_value)
 
+#Creating the plot 
+ggplot(go_data,
+       aes(x = Fold_Change,
+           y = reorder(GO_Term, Fold_Change),
+           size = Ref_Count,
+           color = logP)) +
+  geom_point(alpha = 0.85) +
+  scale_size_continuous(range = c(3, 12)) +
+
+  #Selecting the colors
+  scale_color_gradientn(colors = c("blue", "green", "yellow", "red")) +
+
+ #Adding labels and customizing elements of the plot 
+ labs(
+    x = "Fold Enrichment",
+    y = "GO Term",
+    size = "Gene Count",
+    color = "-log10(p-value)",
+    title = "Panther GO-Slim biological processes enriched in hypomethylated genes"
+  ) +
+ theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 18), # centered title
+    axis.text.y = element_text(size = 14),  # bigger GO term names
+    axis.text.x = element_text(size = 12),
+    axis.title.x = element_text(size = 13, margin = margin(t = 10)),
+    axis.title.y = element_text(size = 13, margin = margin(r = 10)),
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 11)
+  )
 
 ```
 
